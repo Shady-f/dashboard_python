@@ -4,8 +4,8 @@ YouTube Channel Engagement Dashboard
 This script uses the YouTube Data API to fetch the latest videos from a given channel
 and analyzes key engagement metrics like views, likes, comments, and engagement rate.
 
-Author: [Your Name]
-GitHub: https://github.com/[your-username]
+Author: Fakir Shayad
+GitHub: https://github.com/shayad_7
 """
 
 # ====== Import required libraries ======
