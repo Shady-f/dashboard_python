@@ -1,0 +1,150 @@
+"""
+YouTube Channel Engagement Dashboard
+
+This script uses the YouTube Data API to fetch the latest videos from a given channel
+and analyzes key engagement metrics like views, likes, comments, and engagement rate.
+
+Author: [Your Name]
+GitHub: https://github.com/[your-username]
+"""
+
+# ====== Import required libraries ======
+import pandas as pd  # Data handling
+import matplotlib.pyplot as plt  # Data visualization
+from googleapiclient.discovery import build  # To access YouTube API
+from matplotlib import rcParams  # To customize plot styles
+import re  # For cleaning video titles
+
+# Use a font that can show emojis or special characters
+rcParams['font.family'] = 'DejaVu Sans'
+
+# ====== YouTube API setup ======
+API_KEY = 'AIzaSyDHSo4LfhPRpCHZAWlgIpURfk3udLz'  # Replace with your own API key
+YOUTUBE_API_SERVICE_NAME = 'youtube'
+YOUTUBE_API_VERSION = 'v3'
+
+# Connect to YouTube API
+youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=API_KEY)
+
+# ====== Clean up video titles for display ======
+def clean_title(title):
+    """
+    Removes special characters and emojis to avoid issues in plots.
+    """
+    return re.sub(r'[^\x00-\x7F\u0900-\u097F\u0980-\u09FF]+', '', title)
+
+# ====== Get channel ID from username or full URL ======
+def get_channel_id(username_or_url):
+    """
+    Extract channel ID from a YouTube username or URL.
+    """
+    if 'youtube.com/channel/' in username_or_url:
+        return username_or_url.split('channel/')[1]
+    else:
+        response = youtube.channels().list(forUsername=username_or_url, part='id').execute()
+        if response['items']:
+            return response['items'][0]['id']
+        else:
+            print("Channel not found.")
+            return None
+
+# ====== Get latest video IDs from the channel ======
+def get_video_ids(channel_id, max_results=5):
+    """
+    Get video IDs of recent uploads.
+    """
+    response = youtube.search().list(
+        channelId=channel_id,
+        part='id',
+        order='date',
+        maxResults=max_results
+    ).execute()
+
+    return [item['id']['videoId'] for item in response['items'] if item['id']['kind'] == 'youtube#video']
+
+# ====== Fetch stats for each video ======
+def get_video_stats(video_ids):
+    """
+    Fetch views, likes, comments, and compute engagement rate for each video.
+    """
+    response = youtube.videos().list(
+        part='statistics,snippet',
+        id=','.join(video_ids)
+    ).execute()
+
+    video_data = []
+    for video in response['items']:
+        title = clean_title(video['snippet']['title'])
+        stats = video['statistics']
+
+        views = int(stats.get('viewCount', 0))
+        likes = int(stats.get('likeCount', 0))
+        comments = int(stats.get('commentCount', 0))
+        shares = 0  # YouTube API doesn't expose shares
+
+        engagement = likes + comments + shares
+        engagement_rate = round((engagement / views) * 100, 2) if views else 0
+
+        video_data.append([title, views, likes, comments, shares, engagement, engagement_rate])
+
+    return pd.DataFrame(video_data, columns=[
+        'Title', 'Views', 'Likes', 'Comments', 'Shares', 'Total Engagement', 'Engagement Rate %'
+    ])
+
+# ====== Plot the data visually ======
+def plot_engagement(df):
+    """
+    Plot bar chart and pie chart of engagement data.
+    """
+    # Bar Chart
+    df.plot(
+        x='Title',
+        y=['Likes', 'Comments', 'Shares'],
+        kind='bar',
+        figsize=(10, 6),
+        colormap='coolwarm'
+    )
+    plt.title('Engagement on Latest Videos')
+    plt.ylabel('Count')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.show()
+
+    # Pie Chart
+    df.set_index('Title')['Engagement Rate %'].plot(
+        kind='pie',
+        autopct='%1.1f%%',
+        figsize=(7, 7),
+        legend=False
+    )
+    plt.title("Engagement Rate Distribution")
+    plt.ylabel('')
+    plt.show()
+
+# ====== Main controller function ======
+def run_dashboard(username_or_url):
+    """
+    Runs the full dashboard: fetches data and displays results.
+    """
+    print(f"Fetching data for: {username_or_url}")
+
+    channel_id = get_channel_id(username_or_url)
+    if not channel_id:
+        return
+
+    video_ids = get_video_ids(channel_id)
+    if not video_ids:
+        print("No recent videos found.")
+        return
+
+    df = get_video_stats(video_ids)
+
+    print("\nYouTube Analytics Summary:\n")
+    print(df.to_string(index=False))
+
+    plot_engagement(df)
+
+# ====== Entry point ======
+if __name__ == "__main__":
+    username_input = input("Enter YouTube username or channel URL: ")
+    run_dashboard(username_input)
